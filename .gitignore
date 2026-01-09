@@ -1,0 +1,10 @@
+# Data files
+data/output_v2.csv
+
+# Folders
+기존양식/
+
+# Python environment
+__pycache__/
+.venv/
+.ipynb_checkpoints/
