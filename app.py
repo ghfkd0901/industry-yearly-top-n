@@ -9,7 +9,7 @@ st.set_page_config(page_title="산업용 주요고객 분석 리포트", layout=
 @st.cache_data
 def load_summary_data():
     # 파일 경로 설정
-    file_path = r'D:\project2\산업용주요고객판매량분석_차성윤\data\industry_yearly_summary.csv'
+    file_path = 'data/industry_yearly_summary.csv'
     if not os.path.exists(file_path):
         return None
     return pd.read_csv(file_path, encoding='utf-8-sig')
