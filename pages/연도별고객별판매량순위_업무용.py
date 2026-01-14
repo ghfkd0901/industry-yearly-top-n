@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import io
 
 # 1. 데이터 로드
 @st.cache_data
@@ -29,13 +30,13 @@ if df_comm is not None:
     st.sidebar.header("⚙️ 보고서 필터 설정")
     selected_year = st.sidebar.selectbox("📅 분석 연도", sorted(df_comm['매출년도'].unique(), reverse=True))
     
-    # [유지] 상품(용도) 필터링
+    # 상품(용도) 필터링
     all_products = sorted(df_comm['상품'].unique().tolist())
     selected_products = st.sidebar.multiselect("🏷️ 용도 선택", all_products, default=all_products)
 
     unit_option = st.sidebar.radio("📊 분석 단위", ["㎥", "천㎥", "MJ", "GJ"], index=0, horizontal=True)
 
-    # 최소 연간합계 기준 500,000 설정
+    # 최소 연간합계 기준 설정
     if unit_option == "㎥":
         target_col, div_factor, default_min = "사용량", 1, 500000
     elif unit_option == "천㎥":
@@ -81,6 +82,7 @@ if df_comm is not None:
             (main_data['연간 합계'] >= min_value)
         ]
 
+        # 최종 리포트용 DataFrame 구성
         if not final_filtered.empty:
             total_sum = final_filtered.drop(columns='순위').sum()
             total_row = pd.DataFrame([total_sum], index=["선택범위 합계"])
@@ -88,6 +90,23 @@ if df_comm is not None:
             report_df = pd.concat([final_filtered, total_row])
         else:
             report_df = pd.DataFrame()
+
+        # --- [추가] 사이드바 하단에 엑셀 다운로드 버튼 배치 ---
+        st.sidebar.divider()
+        if not report_df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                report_df.to_excel(writer, sheet_name='실적보고서', index=True)
+            excel_data = output.getvalue()
+
+            st.sidebar.download_button(
+                label="📥 보고서 엑셀 다운로드",
+                data=excel_data,
+                file_name=f"{selected_year}_영업용_주요고객현황.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        # --------------------------------------------------
 
         # 스타일 및 출력
         st.markdown(f"""
@@ -102,10 +121,9 @@ if df_comm is not None:
         </style>
         """, unsafe_allow_html=True)
 
-        # --- 보고서 제목 및 상세 정보 (상품 정보 포함) ---
+        # 보고서 본문
         st.markdown(f"<h2 class='report-header'>🏨 {selected_year}년 주요고객 현황 ({start_rank}위 ~ {end_rank}위)</h2>", unsafe_allow_html=True)
         
-        # 💡 선택된 상품명을 리스트업하여 표시
         products_display = ", ".join(selected_products) if selected_products else "없음"
         st.markdown(f"""
             <div class='report-header' style='font-size: 16px; color: #333;'>

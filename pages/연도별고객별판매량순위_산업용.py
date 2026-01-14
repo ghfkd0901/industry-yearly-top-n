@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import io
 
 # 1. 데이터 로드
 @st.cache_data
@@ -17,7 +18,6 @@ if df_ind is not None:
     df_ind['월'] = df_ind['매출년월'].str[5:]
     
     # --- 사이드바 설정 ---
-    # [추가] 상단 요약 지표
     st.sidebar.markdown("### 📊 산업용 전체 현황")
     total_customers_all = df_ind['고객명'].nunique()
     total_volume_all = df_ind['사용량'].sum()
@@ -31,7 +31,7 @@ if df_ind is not None:
     selected_year = st.sidebar.selectbox("📅 분석 연도", sorted(df_ind['매출년도'].unique(), reverse=True))
     unit_option = st.sidebar.radio("📊 분석 단위", ["㎥", "천㎥", "MJ", "GJ"], index=0, horizontal=True)
 
-    # 단위별 설정 (산업용 기준: 기본 100만 ㎥)
+    # 단위별 설정
     if unit_option == "㎥":
         target_col, div_factor, default_min = "사용량", 1, 1000000
     elif unit_option == "천㎥":
@@ -45,8 +45,6 @@ if df_ind is not None:
 
     # --- 데이터 가공 ---
     df_filtered = df_ind[df_ind['매출년도'] == selected_year].copy()
-    
-    # 단위 변환 적용
     df_filtered['display_value'] = df_filtered[target_col] / div_factor
 
     # 피벗 테이블 생성
@@ -55,12 +53,12 @@ if df_ind is not None:
     ).fillna(0)
 
     if not pivot.empty:
-        # 순위 부여 및 최댓값 파악
+        # 데이터 정렬 및 순위 부여
         main_data = pivot.drop("연간 합계").sort_values('연간 합계', ascending=False)
         main_data.insert(0, '순위', range(1, len(main_data) + 1))
         max_rank = int(main_data['순위'].max())
 
-        # [변경] 순위 및 글자 크기를 숫자 입력 방식으로 수정
+        # 사이드바 UI 설정 계속
         st.sidebar.subheader("🏆 순위 범위 및 UI 설정")
         col_r1, col_r2 = st.sidebar.columns(2)
         with col_r1:
@@ -77,7 +75,7 @@ if df_ind is not None:
             (main_data['연간 합계'] >= min_value)
         ]
 
-        # 결과 데이터 구성
+        # 최종 리포트용 DataFrame 구성
         if not final_filtered.empty:
             total_sum = final_filtered.drop(columns='순위').sum()
             total_row = pd.DataFrame([total_sum], index=["선택범위 합계"])
@@ -86,7 +84,24 @@ if df_ind is not None:
         else:
             report_df = pd.DataFrame()
 
-        # 스타일 설정
+        # --- [변경] 사이드바 하단에 엑셀 다운로드 버튼 배치 ---
+        st.sidebar.divider()
+        if not report_df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                report_df.to_excel(writer, sheet_name='실적보고서', index=True)
+            excel_data = output.getvalue()
+
+            st.sidebar.download_button(
+                label="📥 보고서 엑셀 다운로드",
+                data=excel_data,
+                file_name=f"{selected_year}_산업용_주요고객현황.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True  # 사이드바 너비에 맞게 꽉 채움
+            )
+        # --------------------------------------------------
+
+        # 메인 화면 스타일 설정
         st.markdown(f"""
         <style>
             .report-header {{ text-align: center; color: black; }}
@@ -99,7 +114,7 @@ if df_ind is not None:
         </style>
         """, unsafe_allow_html=True)
 
-        # 보고서 본문
+        # 메인 보고서 출력
         st.markdown(f"<h2 class='report-header'>🏭 {selected_year}년 산업용 주요고객 월별 현황 보고서</h2>", unsafe_allow_html=True)
         st.markdown(f"<p class='report-header' style='font-size: 16px;'>조회 범위: {start_rank}위 ~ {end_rank}위 | 기준: 연간 합계 {min_value:,.0f} {unit_option} 이상</p>", unsafe_allow_html=True)
 
@@ -118,6 +133,7 @@ if df_ind is not None:
                     html_table += f'<td>{row.get(m, 0):,.0f}</td>'
                 html_table += f'<td>{row["연간 합계"]:,.0f}</td></tr>'
             html_table += '</tbody></table>'
+            
             st.markdown(html_table, unsafe_allow_html=True)
             st.caption(f"※ 본 리포트는 {selected_year}년도 산업용 실적 데이터를 기준으로 자동 생성되었습니다.")
         else:
